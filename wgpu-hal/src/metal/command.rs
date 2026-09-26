@@ -1914,6 +1914,19 @@ impl crate::CommandEncoder for super::CommandEncoder {
             residency_set.addAllocation(ProtocolObject::from_ref(&*dependency.raw));
         }
         residency_set.commit();
+        // Make the acceleration structures resident now, and keep the set alive until
+        // every command buffer using it has completed: dropped here, nothing keeps the
+        // BLASes resident while ray queries traverse them.
+        residency_set.requestResidency();
+        for command_buffer in command_buffers {
+            let keep_alive = residency_set.clone();
+            let block = block2::RcBlock::new(
+                move |_: NonNull<ProtocolObject<dyn MTLCommandBuffer>>| {
+                    let _ = &keep_alive;
+                },
+            );
+            unsafe { command_buffer.raw.addCompletedHandler(block2::RcBlock::as_ptr(&block)) };
+        }
     }
 
     unsafe fn begin_ray_tracing_pass(&mut self, _desc: &crate::RayTracingPassDescriptor) {
