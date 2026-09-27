@@ -358,8 +358,8 @@ impl CommandEncoderStatus {
         // state or an error, to be transferred to the command buffer.
         match mem::replace(self, Self::Consumed) {
             Self::Recording(inner) => {
-                // Nothing should have opened the encoder yet.
-                assert!(!inner.encoder.is_open);
+                // `as_hal_mut` may have opened the encoder (backport of gfx-rs/wgpu#8387,
+                // in 27.0.3: the assertion here made it unusable).
                 Self::Finished(inner)
             }
             Self::Consumed | Self::Finished(_) => Self::Error(EncoderStateError::Ended.into()),

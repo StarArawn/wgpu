@@ -1487,6 +1487,16 @@ impl Queue {
         let mut size_info = blas.size_info;
         size_info.acceleration_structure_size = size;
 
+        // The build index before `pending_writes`, in `Queue::submit`'s lock order
+        // (command indices, then pending writes): the other way round, a compaction
+        // deadlocked with a submit from another thread.
+        let built_index = {
+            let mut command_indices_lock = device.command_indices.write();
+            command_indices_lock.next_acceleration_structure_build_command_index += 1;
+            NonZeroU64::new(command_indices_lock.next_acceleration_structure_build_command_index)
+                .unwrap()
+        };
+
         let mut pending_writes = self.pending_writes.lock();
         let cmd_buf_raw = pending_writes.activate();
 
@@ -1519,12 +1529,6 @@ impl Queue {
         };
 
         drop(snatch_guard);
-
-        let mut command_indices_lock = device.command_indices.write();
-        command_indices_lock.next_acceleration_structure_build_command_index += 1;
-        let built_index =
-            NonZeroU64::new(command_indices_lock.next_acceleration_structure_build_command_index)
-                .unwrap();
 
         let new_blas = Arc::new(Blas {
             raw: Snatchable::new(raw),

@@ -2232,8 +2232,14 @@ impl Writer {
 
         //self.check(class.required_capabilities())?;
 
-        if class == spirv::StorageClass::StorageBuffer {
-            self.decorate(id, Decoration::Coherent, &[]);
+        // Only where the shader may write: on read-only buffers the decoration changes
+        // nothing a shader can observe (wgpu never binds one buffer read-only and
+        // writable in the same dispatch), and on NVIDIA it keeps loads out of the L1
+        // cache (lucent's path tracer traced 20-30% slower for it).
+        if let crate::AddressSpace::Storage { access } = global_variable.space {
+            if access.contains(crate::StorageAccess::STORE) {
+                self.decorate(id, Decoration::Coherent, &[]);
+            }
         }
 
         if self.flags.contains(WriterFlags::DEBUG) {
